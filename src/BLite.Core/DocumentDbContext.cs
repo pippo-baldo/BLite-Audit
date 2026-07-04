@@ -20,6 +20,17 @@ namespace BLite.Core;
 public abstract partial class DocumentDbContext : IDocumentDbContext
 {
     protected readonly StorageEngine _storage;
+
+
+    /// <summary>Crea un context con l'audit gia configurato.</summary>
+    protected DocumentDbContext(string databasePath, Audit.BLiteAuditOptions auditOptions)
+        : this(databasePath)
+    {
+        _storage.ConfigureAudit(auditOptions ?? throw new ArgumentNullException(nameof(auditOptions)));
+    }
+
+    /// <summary>Metriche in-process. Non-null solo se BLiteAuditOptions.EnableMetrics = true.</summary>
+    public Audit.BLiteMetrics? AuditMetrics => _storage.AuditMetrics;
     internal readonly CDC.ChangeStreamDispatcher _cdc;
     private readonly FreeSpaceIndexProvider _freeSpaceIndexes;
     private readonly BLiteKvStore _kvStore;

@@ -51,6 +51,22 @@ public sealed partial class StorageEngine : IDisposable
     // Held only by the group commit writer (and sync commit / checkpoint paths).
     private readonly SemaphoreSlim _commitLock = new(1, 1);
 
+    // ── Audit subsystem ────────────────────────────────────────────────────────
+    private volatile Audit.BLiteAuditOptions? _auditOptions;
+    private volatile Audit.BLiteMetrics? _auditMetrics;
+
+    /// <summary>Configura il sottosistema di audit. Chiamato da BLiteEngine/DocumentDbContext dopo la costruzione.</summary>
+    internal void ConfigureAudit(Audit.BLiteAuditOptions options)
+    {
+        _auditOptions = options ?? throw new ArgumentNullException(nameof(options));
+        _auditMetrics = options.EnableMetrics ? new Audit.BLiteMetrics() : null;
+    }
+
+    /// <summary>Metriche in-process. Non-null solo se BLiteAuditOptions.EnableMetrics è true.</summary>
+    internal Audit.BLiteMetrics? AuditMetrics => _auditMetrics;
+    internal Audit.IBLiteAuditSink? AuditSink => _auditOptions?.Sink;
+    internal Audit.BLiteAuditOptions? AuditOptions => _auditOptions;
+
     // Serialises the multi-step read-modify-write on the Collection catalog pages
     // (page 1 and its overflow chain).  Prevents concurrent SaveCollectionMetadata /
     // DeleteCollectionMetadata calls from corrupting the slotted-page structure.

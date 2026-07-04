@@ -34,6 +34,17 @@ public sealed class BLiteEngine : IDisposable, ITransactionHolder
     /// </summary>
     internal StorageEngine Storage => _storage;
 
+
+    /// <summary>Crea un engine con l'audit gia configurato.</summary>
+    public BLiteEngine(string databasePath, Audit.BLiteAuditOptions auditOptions)
+        : this(databasePath)
+    {
+        _storage.ConfigureAudit(auditOptions ?? throw new ArgumentNullException(nameof(auditOptions)));
+    }
+
+    /// <summary>Metriche in-process. Non-null solo se BLiteAuditOptions.EnableMetrics = true.</summary>
+    public Audit.BLiteMetrics? AuditMetrics => _storage.AuditMetrics;
+
     #region Constructors
 
     /// <summary>
