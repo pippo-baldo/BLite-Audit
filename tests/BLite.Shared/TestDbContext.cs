@@ -91,6 +91,11 @@ public partial class TestDbContext : DocumentDbContext
     public DocumentCollection<ObjectId, EntityWithDictionary> DictionaryEntities { get; set; } = null!;
     public DocumentCollection<ObjectId, EntityWithGenericProperty> GenericPropertyEntities { get; set; } = null!;
 
+    public TestDbContext(string databasePath, BLite.Core.Audit.BLiteAuditOptions auditOptions) : base(databasePath, auditOptions)
+    {
+        InitializeCollections();
+    }
+
     public TestDbContext(string databasePath) : base(databasePath)
     {
         InitializeCollections();
