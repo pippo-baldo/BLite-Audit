@@ -178,6 +178,7 @@ public sealed partial class StorageEngine
             throw new TimeoutException("Too many concurrent writers — admission gate full.");
 
         var sw = _metrics != null ? Metrics.ValueStopwatch.StartNew() : default;
+        var auditSw = _auditOptions is not null ? Metrics.ValueStopwatch.StartNew() : default;
         bool success = false;
         try
         {
@@ -189,6 +190,20 @@ public sealed partial class StorageEngine
             await _commitChannel.Writer.WriteAsync(pending, ct).ConfigureAwait(false);
             await pending.Completion.Task.ConfigureAwait(false);
             success = true;
+
+            // ── AUDIT: evento di commit (solo su commit riuscito) ──────────────────
+            if (_auditOptions is not null)
+            {
+                var auditElapsed = TimeSpan.FromTicks(auditSw.GetElapsedMicros() * 10);
+                AuditSink?.OnCommit(new Audit.CommitAuditEvent(
+                    transactionId,
+                    string.Empty,                 // StorageEngine non conosce la collection del commit
+                    pages?.Count ?? 0,
+                    (int)_wal.GetCurrentSize(),
+                    auditElapsed));
+                AuditMetrics?.RecordCommit();
+            }
+            // ───────────────────────────────────────────────────────────────────────
         }
         finally
         {

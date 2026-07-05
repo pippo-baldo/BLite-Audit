@@ -219,15 +219,30 @@ public class BTreeQueryProvider<TId, T> : IQueryProvider, IAsyncQueryProvider, I
         }
 
         // ── General path: FetchAsync picks index / BSON scan / full scan ─────
+        // ── AUDIT: init (solo percorso generale) ───────────────────────────────
+        var auditActive = _collection.AuditOptions is not null;
+        var auditSw = auditActive ? Metrics.ValueStopwatch.StartNew() : default;
+        var auditStats = auditActive ? new Audit.QueryAuditStats() : null;
         // FetchAsync always applies the WHERE clause internally (all three strategies
         // filter before yielding), so no residual WHERE step is needed afterwards.
         var sourceList = new List<T>();
         bool whereAlreadyApplied = model.WhereClause != null;
 
-        await foreach (var item in _collection.FetchAsync(model.WhereClause, fetchLimit, cancellationToken))
+        await foreach (var item in _collection.FetchAsync(model.WhereClause, fetchLimit, null, cancellationToken, auditStats))
             sourceList.Add(item);
 
         IEnumerable<T> sourceData = sourceList;
+
+        // ── AUDIT: emit evento query ────────────────────────────────────────────
+        if (auditActive)
+        {
+            var stats = auditStats!;
+            var auditElapsed = TimeSpan.FromTicks(auditSw.GetElapsedMicros() * 10);
+            _collection.AuditSink?.OnQuery(new Audit.QueryAuditEvent(
+                _collection.CollectionName, stats.Strategy, stats.IndexName, sourceList.Count, auditElapsed));
+            _collection.AuditMetrics?.RecordQuery(stats.Strategy, auditElapsed);
+        }
+        // ────────────────────────────────────────────────────────────────────────
 
         // ── Complex-operator fallback ──────────────────────────────────────────
         // GroupBy, Join, Sum/Average/Min/Max with selectors — operators the direct

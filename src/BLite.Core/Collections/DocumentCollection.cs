@@ -44,6 +44,12 @@ public class DocumentCollection<TId, T> : IDocumentCollection<TId, T>, IDisposab
     private readonly CollectionIndexManager<TId, T> _indexManager;
     private readonly string _collectionName;
 
+    // ── Accessor audit (letti da BTreeQueryProvider) ──────────────────────────
+    internal string CollectionName => _collectionName;
+    internal Audit.BLiteAuditOptions? AuditOptions => _storage.AuditOptions;
+    internal Audit.IBLiteAuditSink? AuditSink => _storage.AuditSink;
+    internal Audit.BLiteMetrics? AuditMetrics => _storage.AuditMetrics;
+
     // Free space tracking: 16-bucket index for O(1) FindPage
     private readonly FreeSpaceIndex _fsi;
     // Cached delegate — avoids per-call closure allocation when passed to _fsi.FindPage.
@@ -1532,6 +1538,7 @@ public class DocumentCollection<TId, T> : IDocumentCollection<TId, T>, IDisposab
 
     private async Task InsertDataCore(TId id, T entity, byte[] docData, ITransaction transaction, int docLength = -1)
     {
+        var auditSw = _storage.AuditOptions is not null ? Metrics.ValueStopwatch.StartNew() : default;
         if (docLength >= 0 && docLength < docData.Length)
             docData = docData[..docLength]; // trim to actual serialized size
         DocumentLocation location;
@@ -1562,6 +1569,19 @@ public class DocumentCollection<TId, T> : IDocumentCollection<TId, T>, IDisposab
 
         // Notify CDC
         await NotifyCdc(OperationType.Insert, id, transaction, docData);
+
+        // ── AUDIT: evento di insert ────────────────────────────────────────────
+        if (_storage.AuditOptions is not null)
+        {
+            var auditElapsed = TimeSpan.FromTicks(auditSw.GetElapsedMicros() * 10);
+            _storage.AuditSink?.OnInsert(new Audit.InsertAuditEvent(
+                transaction.TransactionId,
+                _collectionName,
+                docData.Length,
+                auditElapsed));
+            _storage.AuditMetrics?.RecordInsert(auditElapsed);
+        }
+        // ───────────────────────────────────────────────────────────────────────
     }
 
     /// <summary>
@@ -2637,7 +2657,8 @@ public class DocumentCollection<TId, T> : IDocumentCollection<TId, T>, IDisposab
         System.Linq.Expressions.LambdaExpression? whereClause,
         int fetchLimit,
         ITransaction? transaction,
-        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
+        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default,
+        Audit.QueryAuditStats? auditStats = null)
     {
         int yielded = 0;
 
@@ -2656,6 +2677,7 @@ public class DocumentCollection<TId, T> : IDocumentCollection<TId, T>, IDisposab
             var indexOpt = Query.IndexOptimizer.TryOptimize<T>(whereClause, GetIndexes(), ConverterRegistry);
             if (indexOpt != null)
             {
+                if (auditStats != null) { auditStats.Strategy = Audit.QueryStrategy.IndexScan; auditStats.IndexName = indexOpt.IndexName; }
                 if (indexOpt.IsVectorSearch)
                 {
                     await foreach (var item in VectorSearchAsync(indexOpt.IndexName, indexOpt.VectorQuery!, indexOpt.K, ct: ct))
@@ -2694,6 +2716,7 @@ public class DocumentCollection<TId, T> : IDocumentCollection<TId, T>, IDisposab
             // Filters at raw-BSON level before deserializing — no compiled Func<T,bool> needed.
             if (BsonExpressionEvaluator.TryCompile<T>(whereClause, ConverterRegistry, _storage.GetKeyMap()) is { } bsonPred)
             {
+                if (auditStats != null) auditStats.Strategy = Audit.QueryStrategy.BsonScan;
                 await foreach (var item in ScanAsync(bsonPred, transaction, ct))
                 {
                     yield return item;
@@ -2703,6 +2726,7 @@ public class DocumentCollection<TId, T> : IDocumentCollection<TId, T>, IDisposab
             }
 
             // ── Strategy 3: full scan + in-memory filter ──────────────────────
+            if (auditStats != null) auditStats.Strategy = Audit.QueryStrategy.FullScan;
             // Reuses compiledWhere if Strategy 1 already triggered it; compiles otherwise.
             await foreach (var item in FindAllAsync(transaction, ct))
                 if (GetCompiled()(item)) { yield return item; if (++yielded >= fetchLimit) yield break; }
@@ -2710,6 +2734,7 @@ public class DocumentCollection<TId, T> : IDocumentCollection<TId, T>, IDisposab
         else
         {
             // ── No WHERE: plain full scan with optional limit ─────────────────
+            if (auditStats != null) auditStats.Strategy = Audit.QueryStrategy.FullScan;
             await foreach (var item in FindAllAsync(transaction, ct))
             {
                 yield return item;
