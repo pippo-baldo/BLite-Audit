@@ -1580,6 +1580,9 @@ public class DocumentCollection<TId, T> : IDocumentCollection<TId, T>, IDisposab
                 docData.Length,
                 auditElapsed));
             _storage.AuditMetrics?.RecordInsert(auditElapsed);
+            if (_storage.AuditOptions?.SlowQueryThreshold is { } slowThr && auditElapsed > slowThr)
+                _storage.AuditSink?.OnSlowOperation(new Audit.SlowOperationEvent(
+                    Audit.SlowOperationType.Insert, _collectionName, auditElapsed, null));
         }
         // ───────────────────────────────────────────────────────────────────────
     }

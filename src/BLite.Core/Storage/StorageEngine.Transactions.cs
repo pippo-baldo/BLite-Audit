@@ -202,6 +202,9 @@ public sealed partial class StorageEngine
                     (int)_wal.GetCurrentSize(),
                     auditElapsed));
                 AuditMetrics?.RecordCommit();
+                if (_auditOptions?.SlowQueryThreshold is { } slowThr && auditElapsed > slowThr)
+                    AuditSink?.OnSlowOperation(new Audit.SlowOperationEvent(
+                        Audit.SlowOperationType.Commit, string.Empty, auditElapsed, null));
             }
             // ───────────────────────────────────────────────────────────────────────
         }

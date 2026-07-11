@@ -241,6 +241,9 @@ public class BTreeQueryProvider<TId, T> : IQueryProvider, IAsyncQueryProvider, I
             _collection.AuditSink?.OnQuery(new Audit.QueryAuditEvent(
                 _collection.CollectionName, stats.Strategy, stats.IndexName, sourceList.Count, auditElapsed));
             _collection.AuditMetrics?.RecordQuery(stats.Strategy, auditElapsed);
+            if (_collection.AuditOptions?.SlowQueryThreshold is { } slowThr && auditElapsed > slowThr)
+                _collection.AuditSink?.OnSlowOperation(new Audit.SlowOperationEvent(
+                    Audit.SlowOperationType.Query, _collection.CollectionName, auditElapsed, stats.IndexName));
         }
         // ────────────────────────────────────────────────────────────────────────
 
