@@ -179,6 +179,10 @@ public sealed partial class StorageEngine
 
         var sw = _metrics != null ? Metrics.ValueStopwatch.StartNew() : default;
         var auditSw = _auditOptions is not null ? Metrics.ValueStopwatch.StartNew() : default;
+        using var auditActivity = _auditOptions?.EnableDiagnosticSource == true
+            ? Audit.BLiteDiagnostics.ActivitySource.StartActivity("BLite.Commit")
+            : null;
+        auditActivity?.SetTag("blite.transaction_id", transactionId);
         bool success = false;
         try
         {

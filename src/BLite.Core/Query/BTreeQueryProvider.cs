@@ -223,6 +223,10 @@ public class BTreeQueryProvider<TId, T> : IQueryProvider, IAsyncQueryProvider, I
         var auditActive = _collection.AuditOptions is not null;
         var auditSw = auditActive ? Metrics.ValueStopwatch.StartNew() : default;
         var auditStats = auditActive ? new Audit.QueryAuditStats() : null;
+        using var auditActivity = _collection.AuditOptions?.EnableDiagnosticSource == true
+            ? Audit.BLiteDiagnostics.ActivitySource.StartActivity("BLite.Query")
+            : null;
+        auditActivity?.SetTag("blite.collection", _collection.CollectionName);
         // FetchAsync always applies the WHERE clause internally (all three strategies
         // filter before yielding), so no residual WHERE step is needed afterwards.
         var sourceList = new List<T>();
@@ -241,6 +245,9 @@ public class BTreeQueryProvider<TId, T> : IQueryProvider, IAsyncQueryProvider, I
             _collection.AuditSink?.OnQuery(new Audit.QueryAuditEvent(
                 _collection.CollectionName, stats.Strategy, stats.IndexName, sourceList.Count, auditElapsed));
             _collection.AuditMetrics?.RecordQuery(stats.Strategy, auditElapsed);
+            auditActivity?.SetTag("blite.query.strategy", stats.Strategy.ToString());
+            auditActivity?.SetTag("blite.query.index", stats.IndexName);
+            auditActivity?.SetTag("blite.query.result_count", sourceList.Count);
             if (_collection.AuditOptions?.SlowQueryThreshold is { } slowThr && auditElapsed > slowThr)
                 _collection.AuditSink?.OnSlowOperation(new Audit.SlowOperationEvent(
                     Audit.SlowOperationType.Query, _collection.CollectionName, auditElapsed, stats.IndexName));
