@@ -9,6 +9,7 @@
   </Folder>
   <Folder Name="/samples/">
     <Project Path="samples/BLite.BlazorWasm/BLite.BlazorWasm.csproj" />
+    <Project Path="samples/BLite.AuditDashboard/BLite.AuditDashboard.csproj" />
   </Folder>
   <Folder Name="/src/">
     <Project Path="src/BLite.Bson/BLite.Bson.csproj" />

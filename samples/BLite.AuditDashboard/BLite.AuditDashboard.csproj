@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>BLite.AuditDashboard</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\BLite.Core\BLite.Core.csproj" />
+    <ProjectReference Include="..\BLite.AuditDashboard.Model\BLite.AuditDashboard.Model.csproj" />
+  </ItemGroup>
+</Project>
